@@ -42,7 +42,7 @@ Compared with direct register-level implementation, this avoids writing calibrat
 
 ---
 
-## Pin connections (consistent with section 3.7 of `../../硬件物料与引脚分配.md`)
+## Pin connections
 
 | MPU6050 | ESP32-S3 | Notes |
 |---|---|---|
@@ -162,4 +162,3 @@ Serial communication uses native USB CDC (GPIO19/20 are occupied by USB).
 | Official Arduino documentation | https://docs.arduino.cc/libraries/mpu6050_light/ |
 | Previous basic example | `../../MPU6050_Basic/MPU6050_Basic.ino` |
 | Previous tilt-angle example | `../../MPU6050_TiltAngle/MPU6050_TiltAngle.ino` |
-| Pin definitions | `../../硬件物料与引脚分配.md`, section 3.7 |
