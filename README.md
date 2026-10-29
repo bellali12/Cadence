@@ -4,6 +4,8 @@ typora-root-url: ../pic
 
 # Cadence
 
+A smart wearable medicine case for Parkinson's patients. 
+
 ## Naming convention
 
 Subdirectory names: `<number>_<module>_<short_description>`. For example:
