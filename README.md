@@ -1,168 +1,165 @@
-# 01_audio_record_playback
+# 02_imu_raw_data
 
-> **Project type**: Module integration test
-> **Purpose**: Verify that the LMD2718 PDM microphone and NS4168 amplifier can record and play back audio on the ESP32-S3
-> **Microcontroller**: ESP32-S3 (16 MB Flash / 8 MB PSRAM)
-> **Status**: ✅ Hardware test passed
+> **Project type**: Single-module test
+> **Purpose**: Verify that the MPU6050 communicates with the ESP32-S3 and outputs acceleration, temperature, gyroscope data, and orientation angles.
+> **Controller**: ESP32-S3 (16 MB flash)
+> **Status**: 🟡 Awaiting hardware testing
+
+---
+
+## Library selection
+
+**Avoid reinventing the wheel**: Use the [`rfetick/MPU6050_light`](https://github.com/rfetick/MPU6050_light) library:
+
+- ✅ Built-in startup calibration (`calcGyroOffsets` automatically calculates gyroscope zero offsets)
+- ✅ Built-in complementary filter for direct pitch/roll/yaw angle output
+- ✅ No third-party dependencies (only `Wire.h`)
+- ✅ Good ESP32 compatibility
+- ✅ Lightweight and fast
+
+Compared with direct register-level implementation, this avoids writing calibration logic, measurement-range conversions, and filtering algorithms. Future medication-compartment tilt detection can directly use `getAngleX/Y`.
+
+| Alternative library | Output | Selection rationale |
+|---|---|---|
+| **MPU6050_light** ✅ | Raw data + angles | Good balance, simple API, built-in calibration and filtering |
+| Adafruit_MPU6050 | Raw data only | No angle calculation; more dependencies |
+| MPU6050_tockn | Raw data + angles | Less maintenance; filtering considered inferior to MPU6050_light |
+| ElectronicCats (DMP) | Quaternions | Most accurate full 3D output, but complicated configuration |
 
 ---
 
 ## Features
 
-- Serial command `R`: Record 10 seconds of audio to **PSRAM** (no LittleFS or WiFi required)
-- Serial command `P`: Play the recording from PSRAM through the speaker (duplicate samples to both channels to avoid frame-slot alignment issues)
-- Serial command `V`: Real-time volume meter (quickly check whether the microphone responds)
-- Serial command `H`: Display the help menu
+- Initialize at startup (`Wire.begin(8, 7)` specifies the finalized project pins)
+- Automatic sensor calibration (library prints progress)
+- 50 Hz serial output
+
+### Serial commands
+
+- `C`: Recalibrate (keep still for approximately 3 seconds)
+- `R`: Toggle output between CSV and text
+- `H`: Help
 
 ---
 
-## Pin assignments (consistent with `../../硬件物料与引脚分配.md`)
+## Pin connections (consistent with section 3.7 of `../../硬件物料与引脚分配.md`)
 
-| Module | Signal | GPIO | Notes |
-|---|---|---|---|
-| LMD2718 microphone | CLK | GPIO15 | I2S0 PDM clock, 2.048 MHz |
-| LMD2718 microphone | DATA | GPIO16 | I2S0 PDM data |
-| LMD2718 microphone | L/R | GND | Select right channel → `ONLY_RIGHT` |
-| LMD2718 microphone | VDD | 3.3V | **5V will damage the device** |
-| NS4168 amplifier | BCLK (board label: BCLK) | GPIO41 | I2S1 bit clock |
-| NS4168 amplifier | LRC (board label: LRCLK) | GPIO42 | I2S1 word select |
-| NS4168 amplifier | DIN (board label: **SDA**) | GPIO2 | I2S1 data |
-| NS4168 amplifier | VDD | **5V** | |
-| LMD2718 speaker | + / - | NS4168 OUT+ / OUT- | **BTL output: neither terminal is connected to ground** |
+| MPU6050 | ESP32-S3 | Notes |
+|---|---|---|
+| VCC | **3.3V** | Do not use 5V |
+| GND | GND | |
+| SDA | **GPIO8** | ★ Finalized |
+| SCL | **GPIO7** | ★ Finalized |
+| AD0 | GND | Address 0x68 (0x69 if connected to VCC) |
+| INT | Unconnected | Polling is used, not interrupts |
+| XDA/XCL | Unconnected | No secondary sensor connected |
 
-> ⚠️ The NS4168 module is labeled **BCLK / LRCLK / SDA / VCC / GND**. Here, `SDA` means the I2S data input (DIN), not I2C SDA.
+> ⚠️ **Pull-up resistors**: GY-521 breakout boards usually include 4.7 kΩ pull-ups. Bare-chip designs need a 4.7 kΩ pull-up from each of SDA and SCL to 3.3V.
 
 ---
 
-## Key parameters
+## Output format
 
-| Parameter | Value |
-|---|---|
-| Sample rate | 16,000 Hz |
-| Bit depth | 16-bit |
-| Recording channels | Mono (PDM RX `ONLY_RIGHT`) |
-| Playback channels | **Stereo (`RIGHT_LEFT`, with duplicated samples)** |
-| Recording duration | 10 s |
-| Recording buffer | PSRAM (approximately 312 KB) |
-| I2S ports | Microphone: I2S0; amplifier: I2S1 |
-| PDM gain | **32.0** (see debugging notes below) |
+### CSV (default)
+
+```
+ax,ay,az,temp,gx,gy,gz,pitch,roll,yaw
+0.01,-0.02,1.00,25.3,0.12,-0.08,0.05,0.10,-0.05,0.00
+```
+
+- `ax/ay/az`: Acceleration (g)
+- `temp`: Temperature (°C)
+- `gx/gy/gz`: Gyroscope readings (degrees per second, dps)
+- `pitch/roll/yaw`: Angles from the complementary filter (degrees)
+
+### Text mode (toggle with `R`)
+
+Human-readable, multi-column output for direct viewing in the serial monitor.
 
 ---
 
 ## Build environment
 
-> ⚠️ **Use PlatformIO, not Arduino IDE.**
-> The default Arduino IDE environment uses the newer IDF 5.1+ I2S API, which conflicts with the legacy PDM driver and produces all-zero output.
-> See `../../datasheet/麦克风扬声器/03_Mic_LMD2718/README.md`.
+PlatformIO with the Arduino framework. Dependencies are installed automatically via `lib_deps` in `platformio.ini`:
+
+```ini
+lib_deps = rfetick/MPU6050_light @ ^1.2.0
+```
 
 ```bash
 pio run -t upload
 pio device monitor
 ```
 
-Serial baud rate: **115200** (native USB CDC; GPIO19/20 are occupied by USB).
+Serial communication uses native USB CDC (GPIO19/20 are occupied by USB).
 
 ---
 
-## Test procedure
+## Testing procedure
 
-1. **Wiring**: Connect the microphone (3.3V!) and amplifier (5V) + speaker according to the pin table.
-2. **Power on**: `pio run -t upload && pio device monitor`
-3. **Check microphone response**: Enter `V` in the serial monitor and speak into the microphone.
-   - Silence: RMS ≈ 130–160
-   - Speech: RMS ≈ 250+
-4. **Record**: Enter `R` and speak into the microphone for 10 seconds.
-   - `peak` is printed every second; normal speech should reach 3000–10000 (32× gain).
-5. **Play back**: Enter `P`; the speaker should play the recording clearly.
-6. **Adjust volume**:
-   - Too quiet → increase `PDM_GAIN` in `src/audio_pdm.h` (32 → 48).
-   - Distortion or clipping → decrease `PDM_GAIN` (32 → 16).
-
----
-
-## Acceptance criteria (verified by testing)
-
-| Test | Passing criterion | Observed result |
-|---|---|---|
-| Microphone response | RMS increases noticeably when speaking in `V` mode | ✅ |
-| Recording peak | Normal speech: 3000–10000 | ✅ peak 5000–9760 |
-| Amplifier playback | Clear audio playback through speaker | ✅ |
-| Recording duration | Actual sample count ≥ 95% of target | ✅ 100% |
+1. **Wiring**: Connect as shown above (SDA→GPIO8, SCL→GPIO7, AD0→GND, VCC→**3.3V**).
+2. **Power on**: Run `pio run -t upload && pio device monitor`.
+3. **Check startup logs**:
+   - `mpu.begin() status = 0` (0 = success; nonzero = failure)
+   - Calibration messages appear (keep the board still).
+4. **Observe CSV output while the board is stationary and level**:
+   - `|ax|,|ay| < 0.05`, `az ≈ 1.00` (±0.02)
+   - `|gx|,|gy|,|gz| < 0.5`
+   - `pitch, roll ≈ 0` (±1°)
+5. **Tilt the board**: Pitch and roll should change accordingly (within ±90°).
 
 ---
 
-## Debugging notes (key lessons)
+## Acceptance criteria
 
-Three significant bugs were encountered during development. Their solutions may be useful for later projects.
+| Test | Passing criterion |
+|---|---|
+| `mpu.begin() status` | = 0 |
+| Stationary az | ≈ 1.00g (±0.02) |
+| Stationary gyroscope | All three axes < 0.5 dps |
+| Stationary pitch/roll | < 1° |
+| Tilt response | Pitch/roll track movement |
+| Rotation response | Corresponding gyroscope axis changes |
 
-### Bug 1: Default recording gain of 1.0 made playback nearly inaudible
+### Common issues
 
-**Symptom**: With `PDM_GAIN=1.0`, the reported peak was only ~150 (near the noise floor), and playback could not be heard.
-
-**Root cause**: The raw PCM amplitude from the LMD2718 PDM microphone was very low, requiring software gain.
-
-**Solution**: Set `PDM_GAIN = 32.0` and use `clamp_i16` to prevent overflow.
-
-### Bug 2: Incorrect placement of peak measurement caused misleading debugging output
-
-**Symptom**: After increasing gain to 8×, the reported peak was 780, which appeared sufficient, but playback was still inaudible.
-
-**Root cause**: Peak was calculated **before applying gain**, so it reflected raw PCM (~98) rather than the buffered value (~780).
-
-**Solution**: Move peak calculation after gain and clamping so the serial output reflects the values actually stored in the buffer.
-
-> **Lesson**: Place debugging measurements at the **end of the signal-processing chain** (after gain and clamping); otherwise, reported values may differ from the actual output data.
-
-### Bug 3: I2S channel mismatch caused silent playback
-
-**Symptom**: Peak values exceeded 5000 (indicating valid audio data), but playback was completely silent.
-
-**Root cause**:
-- The PDM microphone (RX) was configured as `ONLY_RIGHT`, placing data in the right I2S frame slot.
-- The amplifier (TX) was configured as `ONLY_LEFT`, reading the left slot.
-- **ESP32 I2S does not automatically align left/right frame slots between RX and TX.**
-- Data was written to the right slot while the amplifier read the empty left slot, resulting in silence.
-
-**Unsuccessful attempt**: Changing the amplifier to `ONLY_RIGHT` still produced silence (the NS4168 may read the left slot due to internal LRCK polarity).
-
-**Final solution**: Configure the amplifier for **`RIGHT_LEFT` stereo** and duplicate each playback sample into both L and R channels. This ensures that valid data is available regardless of which channel the NS4168 reads.
-
-> **Lesson**: RX/TX frame-slot misalignment is a limitation of the ESP32 I2S setup. **Using stereo TX with duplicated samples** is a robust workaround that does not depend on channel alignment. This approach can be reused in subsequent audio TX projects.
+| Symptom | Possible cause |
+|---|---|
+| `status != 0` | I2C communication failure: swapped/disconnected SDA/SCL, floating AD0, or VCC disconnected |
+| Stationary pitch/roll drift | Board moved during calibration; press `C` to recalibrate |
+| az far from 1g | Board not level or incorrect measurement range |
+| Sudden data jumps | I2C wires too long (>30 cm), power-supply noise, or missing pull-ups |
 
 ---
 
 ## File structure
 
 ```
-01_audio_record_playback/
-├── platformio.ini      # ESP32-S3 configuration; enable PSRAM and USB CDC
+02_imu_raw_data/
+├── platformio.ini       # ESP32-S3 + MPU6050_light library dependency
 ├── README.md
 └── src/
-    ├── main.cpp         # Serial command dispatch (R/P/V/H)
-    ├── audio_pdm.h/.cpp # PDM microphone initialization and PSRAM recording (PDM_GAIN=32.0)
-    └── audio_amp.h/.cpp # I2S amplifier (RIGHT_LEFT stereo and sample duplication)
+    └── main.cpp          # Initialization, 50 Hz output, and command handling
 ```
 
 ---
 
 ## Out of scope
 
-- ❌ No LittleFS integration (recordings are stored only in PSRAM)
-- ❌ No WiFi / HTTP / Base64 upload
-- ❌ No VAD-based automatic stop (fixed 10-second recording)
-- ❌ No changes to other modules (e-paper display / IMU / motor / LED strip)
-
-For persistent recording storage or PC uploads, this project can be extended based on `../../datasheet/麦克风扬声器/MIC_PDM/src/main.cpp`.
+- ❌ No application-level tilt detection logic (medication-compartment orientation detection is reserved for the final firmware)
+- ❌ No interrupts (DRDY pin not connected)
+- ❌ No Kalman filtering (complementary filtering is sufficient for the medication-compartment application)
+- ❌ No changes to other modules
 
 ---
 
 ## References
 
-| Source | Path |
+| Source | Path / link |
 |---|---|
-| Microphone example | `../../datasheet/麦克风扬声器/MIC_PDM/` |
-| Amplifier example | `../../datasheet/麦克风扬声器/AMP/` |
-| Microphone documentation | `../../datasheet/麦克风扬声器/03_Mic_LMD2718/README.md` |
-| Amplifier documentation | `../../datasheet/麦克风扬声器/04_Amp_NS4168/README.md` |
-| Pin assignments | `../../硬件物料与引脚分配.md` |
-| Amplifier hardware diagnostics | `../05_amp_beep_test/` (square-wave test for hardware-level troubleshooting) |
+| MPU6050_light library | https://github.com/rfetick/MPU6050_light |
+| PlatformIO Registry | https://registry.platformio.org/libraries/rfetick/MPU6050_light |
+| Official Arduino documentation | https://docs.arduino.cc/libraries/mpu6050_light/ |
+| Previous basic example | `../../MPU6050_Basic/MPU6050_Basic.ino` |
+| Previous tilt-angle example | `../../MPU6050_TiltAngle/MPU6050_TiltAngle.ino` |
+| Pin definitions | `../../硬件物料与引脚分配.md`, section 3.7 |
