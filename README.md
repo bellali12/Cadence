@@ -53,18 +53,6 @@ Subdirectory names: `<number>_<module>_<short_description>`. For example:
 
 ---
 
-## Related documentation
-
-| Document | Path | Relationship |
-|---|---|---|
-| Bill of materials and purchasing links | `../物料.md` | Purchasing sources |
-| **Hardware pin assignments** | `../硬件物料与引脚分配.md` | Authoritative pin assignments for all projects |
-| Module datasheets / examples | `../datasheet/` | References for individual module test code |
-| MPU6050 examples | `../MPU6050_Basic/`, `../MPU6050_TiltAngle/` | IMU test references |
-| E-paper display examples | `../screen_arduino/`, `../screen/` | EPD test references |
-
----
-
 ## Maintenance conventions
 
 1. **Register each project before adding it** to prevent an untraceable accumulation of subdirectories.
