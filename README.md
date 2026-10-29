@@ -2,12 +2,7 @@
 typora-root-url: ../pic
 ---
 
-# code/ Directory Index
-
-> This directory is the central location for **all test code and final firmware for the smart medication case project**.
-> Whenever a new PlatformIO, Arduino, or script project is added, register it in the table below and create a subdirectory using the naming convention.
-
----
+# Cadence
 
 ## Naming convention
 
