@@ -39,8 +39,7 @@ Subdirectory names: `<number>_<module>_<short_description>`. For example:
 > **When adding a new project:**
 > 1. Copy a row into the appropriate position and sort by project number.
 > 2. Describe clearly what the project verifies and which modules it covers.
-> 3. For key pins, refer to `../硬件物料与引脚分配.md`.
-> 4. Use status markers: 🟡 In progress / ✅ Passed / ❌ Failed / 📦 Archived.
+> 3. Use status markers: 🟡 In progress / ✅ Passed / ❌ Failed / 📦 Archived.
 
 ---
 
